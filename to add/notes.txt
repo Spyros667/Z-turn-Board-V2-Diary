@@ -41,26 +41,48 @@ block design:
 		* Microcontroller (preset)
 		* (no interrupt)
 		* (no local memory (all will reside in DDR))
-		* DP/IP/DC/IC
-			* DC/IC @ HP
+		* DP/(IP)/DC/(IC)
+			* (DC/IC @ HP)
 			* DP/IP @ GP
+			: GP for access to memory regions(?)
+			: HP for DDR access
+			: !!! IMPORTANT (?) No GP DDR, (even 0 to 0x10) (second try)
+			: BUG: HP @ 
 		* Discrete Ports
 		* sleep until FSLB finishes (i.e.: [microblaze] program loaded onto RAM)
 			* 01 @ reset_mode
 			* GPIO_O & microblaze(dbg_wakeup) @ wakeup
+		* Problem: Microblaze starts from start of memory (0x0 or 0x10..). How to set start vector (linker did not work)?
 	* Address map
 		* No GP0_DDR because Zynq/FSLB already has access to full DDR (i.e. from 0 to FF)
 		* yes GP0_QSPI because of error in vitis
 		* yes IOP
 		* HP0 above FSLB (above 30000), e.g.: 256MB from 0x1000_0000 to 0x1FFF_FFFF
 		* ουσιαστικά θα είναι 2 περιοχές: Data/Instruction για τον microblaze. φαντάζομαι αυτό δηλώνει microblaze πρόσβαση στο _
+	* Traffic generator
+		* Transaction Depth (32) @ supremum of commands in `data.coe`
+		* acts immediately after reset
+	* DMA
+		* Burst (max): "AXI-Stream contiguous bytes"
+		* Width of Buffer Length Register (18): Probably maximum transfer request. for 32KB it should be 15 bits wide
+	* AXI-Stream FIFO w/ Traffic Generator @ RX
+		* (RX!) Fifo depth should probably be supremum of <traffic generator> transactions
+			* (watch out for value of the <full threshold>)
 
 Vitis:
 	* platform for microblaze (including FSBL)
 		* QSPI error: -DXPAR_XQSPIPS_0_QSPI_MODE=XQSPIPS_CONNECTION_MODE_SINGLE (check under block design / zynq)
 		* manual debug @ fsbl_debug.h : `#define FSBL_DEBUG_INFO`
 		* hook for wakeup @ FsblHookBeforeHandoff: (FsblHookFallback did not get called())
-			fsbl_printf(DEBUG_INFO, "Toggle GP0 \r\n");
+			// Wakeup "Microblaze"
+			// -
+			fsbl_printf(DEBUG_INFO, "##################### Toggle GP0 from fallback \r\n");
+			Xil_Out32(0xE000A284, 0x1);
+			Xil_Out32(0xE000A048, 0x1);
+
+			// Wakeup "Microblaze"
+			// -
+			fsbl_printf(DEBUG_INFO, "> > > > > > > > > > > Toggle GP0 @ main exit ?\r\n");
 			Xil_Out32(0xE000A284, 0x1);
 			Xil_Out32(0xE000A048, 0x1);
 		* Info:
@@ -73,4 +95,7 @@ Vitis:
 		* lscript.ld (memory regions)
 			* Base address @ start of HP
 			(size to 256MB)
-			* stack/heap e.g.: 6000/2000
+			* stack/heap e.g.: 100000/100000 (problem @ 600_0000/400_0000, second problem with large classes > fixed with vector:heap:100000)
+		* no fflush(NULL/stdout) > many problems
+			* yes printf(\n\r)
+			* yes getchar()
